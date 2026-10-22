@@ -100,6 +100,10 @@ Done and verified:
   (`validate_graphs.py`); TRELLIS.2 / multi-view / concept graphs are checked against the
   engine's node schemas offline (their models are not installed).
 - Pixal3D core models downloaded and size-verified.
+- Engine on torch 2.14.1+cu130: the comfy_kitchen CUDA backend is enabled (no "cu130" warning).
+- The real **prepare stage ran on CPU** through the studio's own EngineClient (upload, ws events,
+  outputs): BiRefNet cut-out + crop of a Ka-myii character was clean and correctly framed; MoGe
+  and DINOv3 conditioning loaded and ran. On a starved CPU this took ~10 + 13 min (seconds on GPU).
 
 **Not verified: a real generation on the GPU.** The owner's RTX 4070 dropped off the bus
 ("GPU is lost", nvlddmkm event 153, 2026-10-21 19:05) during a Diff-BGM run; it needs a reboot.
