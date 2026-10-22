@@ -47,7 +47,7 @@ Read this whole file before changing anything, and keep it current when you fini
 |---|---|
 | Run (real) | `Atelier3D.bat` or `.venv\Scripts\python.exe -m atelier --open` (port 7870) |
 | Run (demo, no GPU) | `.venv\Scripts\python.exe -m atelier --demo --port 7871` |
-| Tests (no GPU) | `.venv\Scripts\python.exe -m pytest tests -q` (45 unit/API + 1 browser e2e) |
+| Tests (no GPU) | `.venv\Scripts\python.exe -m pytest tests -q` (46 unit/API + 1 browser e2e) |
 | e2e locally | set `ATELIER_E2E_BROWSER=C:\Users\Kokii\AppData\Local\ms-playwright\chromium-1243\chrome-win64\chrome.exe` |
 | Graphs vs real engine | `engine\.venv\Scripts\python.exe scripts\validate_graphs.py` (no GPU, ~2-10 min: imports all nodes) |
 | (Re)install engine | `.venv\Scripts\python.exe scripts\setup_engine.py` (idempotent, stamp in engine/.venv) |
@@ -95,15 +95,16 @@ tests/fixtures/object_info.json   node schemas of the nodes we use, dumped from 
 ## 7. Status (2026-10-22) and what is NOT verified yet
 
 Done and verified:
-- Studio, queue, library, model manager, exports, demo engine: 45 pytest + browser e2e pass.
+- Studio, queue, library, model manager, exports, demo engine: 46 pytest + browser e2e pass.
 - All three Pixal3D quality presets pass the **real engine's** prompt validation
   (`validate_graphs.py`); TRELLIS.2 / multi-view / concept graphs are checked against the
   engine's node schemas offline (their models are not installed).
 - Pixal3D core models downloaded and size-verified.
 - Engine on torch 2.14.1+cu130: the comfy_kitchen CUDA backend is enabled (no "cu130" warning).
 - The real **prepare stage ran on CPU** through the studio's own EngineClient (upload, ws events,
-  outputs): BiRefNet cut-out + crop of a Ka-myii character was clean and correctly framed; MoGe
-  and DINOv3 conditioning loaded and ran. On a starved CPU this took ~10 + 13 min (seconds on GPU).
+  outputs): BiRefNet cut-out + crop of a Ka-myii character was clean and correctly framed (~10 min
+  on the starved CPU), MoGe finished (~13 min). DINOv3/NAF conditioning loaded and was still running
+  after 50 min when it was stopped to spare the CPU, so Pixal3DConditioning has not completed yet.
 
 **Not verified: a real generation on the GPU.** The owner's RTX 4070 dropped off the bus
 ("GPU is lost", nvlddmkm event 153, 2026-10-21 19:05) during a Diff-BGM run; it needs a reboot.

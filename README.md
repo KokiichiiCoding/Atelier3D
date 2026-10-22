@@ -114,7 +114,7 @@ need no compiled extensions, and its memory manager is built to fit big models o
 ## Development
 
 ```bash
-.venv\Scripts\python -m pytest tests -q          # 46 tests, GPU-free (demo engine + browser e2e)
+.venv\Scripts\python -m pytest tests -q          # 47 tests, GPU-free (demo engine + browser e2e)
 engine\.venv\Scripts\python scripts\validate_graphs.py   # graphs vs the real engine, no GPU
 .venv\Scripts\python -m atelier --demo --port 7871
 ```
