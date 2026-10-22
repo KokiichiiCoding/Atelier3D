@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Atelier3D</title>
+  <meta name="description" content="Local text and image to textured 3D studio">
+  <link rel="icon" href="img/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/app.css">
+  <script type="importmap">
+    {"imports": {"three": "./vendor/three/build/three.module.min.js",
+                 "three/addons/": "./vendor/three/examples/jsm/"}}
+  </script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#/create" aria-label="Atelier3D home">
+      <img src="img/icon.svg" alt="" width="26" height="26">
+      <span class="wordmark"><em>Atelier</em><b>3D</b></span>
+    </a>
+    <nav class="tabs" aria-label="Sections">
+      <a href="#/create" data-route="create">Create</a>
+      <a href="#/library" data-route="library">Library</a>
+      <a href="#/models" data-route="models">Models</a>
+    </nav>
+    <div class="top-right">
+      <span id="demo-badge" class="badge accent" hidden>Demo mode</span>
+      <button id="queue-pill" class="pill" type="button" title="Jobs in the queue" hidden></button>
+      <button id="engine-pill" class="pill" type="button" title="Engine status"><i class="dot"></i><span>Engine</span></button>
+    </div>
+  </header>
+
+  <main>
+    <!-- ================================================================ CREATE -->
+    <section id="view-create" class="view create" data-view="create">
+      <aside class="panel left" aria-label="Create">
+        <div id="banners"></div>
+        <div class="segmented modes" role="tablist" aria-label="Input">
+          <button role="tab" data-mode="text">Text</button>
+          <button role="tab" data-mode="image">Image</button>
+          <button role="tab" data-mode="multiview">Multi-view</button>
+        </div>
+
+        <div class="mode-pane" data-pane="text">
+          <label class="field">
+            <span class="label-row"><span>Describe it</span><button id="inspire" class="link" type="button">Inspire me</button></span>
+            <textarea id="prompt" rows="4" maxlength="1000" placeholder="A weathered bronze diving helmet with brass rivets and a glass visor"></textarea>
+          </label>
+          <div class="field">
+            <span class="label">Style</span>
+            <div id="styles" class="chips" role="radiogroup" aria-label="Style"></div>
+          </div>
+          <label class="switch"><input id="character" type="checkbox"><span></span>Character in A-pose (better for rigging)</label>
+          <div id="no-t2i" class="banner info" hidden></div>
+          <div class="row2">
+            <label class="field"><span class="label">Concept model</span><select id="t2i-model"></select></label>
+            <label class="field"><span class="label">Concepts</span>
+              <select id="concept-count"><option>1</option><option>2</option><option selected>4</option></select></label>
+          </div>
+          <div id="concepts" class="concepts" hidden>
+            <div class="label-row"><span class="label">Pick one to build in 3D</span><span id="concepts-status" class="muted small"></span></div>
+            <div id="concept-grid" class="concept-grid"></div>
+          </div>
+        </div>
+
+        <div class="mode-pane" data-pane="image">
+          <div id="drop" class="drop" tabindex="0" role="button" aria-label="Choose an image">
+            <input id="file" type="file" accept="image/*" hidden>
+            <div class="drop-empty">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+              <b>Drop, paste or click</b>
+              <span class="muted small">One object, any background. PNG, JPG or WebP.</span>
+            </div>
+            <img id="drop-img" alt="Chosen image" hidden>
+            <button id="drop-clear" class="icon-btn floating" type="button" aria-label="Remove image" hidden>&times;</button>
+          </div>
+        </div>
+
+        <div class="mode-pane" data-pane="multiview">
+          <div id="no-mv" class="banner info" hidden></div>
+          <p class="muted small">Same object, same scale, views 90&deg; apart. A turnaround sheet cut into four works well.</p>
+          <div class="views">
+            <div class="view-slot" data-view-slot="front"><span>Front *</span></div>
+            <div class="view-slot" data-view-slot="left"><span>Left</span></div>
+            <div class="view-slot" data-view-slot="back"><span>Back</span></div>
+            <div class="view-slot" data-view-slot="right"><span>Right</span></div>
+          </div>
+        </div>
+
+        <details id="settings3d" class="settings" open>
+          <summary>3D settings</summary>
+          <div class="field">
+            <span class="label">Quality</span>
+            <div class="segmented" id="quality" role="radiogroup" aria-label="Quality">
+              <button data-v="draft">Draft<small>fastest</small></button>
+              <button data-v="standard">Standard<small>balanced</small></button>
+              <button data-v="high">High<small>finest detail</small></button>
+            </div>
+          </div>
+          <div class="field" id="engine-field">
+            <span class="label">Engine</span>
+            <div class="segmented" id="engine" role="radiogroup" aria-label="Engine">
+              <button data-v="pixal3d">Pixal3D<small>art, logos, flat colour</small></button>
+              <button data-v="trellis2">TRELLIS.2<small>photos, renders</small></button>
+            </div>
+          </div>
+          <div class="row2">
+            <label class="field"><span class="label">Polycount</span>
+              <select id="faces">
+                <option value="30000">30k &middot; game-ready</option>
+                <option value="80000">80k</option>
+                <option value="150000" selected>150k</option>
+                <option value="300000">300k</option>
+                <option value="700000">700k &middot; film</option>
+              </select></label>
+            <div class="field"><span class="label">Texture</span>
+              <div class="segmented compact" id="texture" role="radiogroup" aria-label="Texture size">
+                <button data-v="1024">1K</button><button data-v="2048">2K</button><button data-v="4096">4K</button>
+              </div></div>
+          </div>
+          <div class="row2">
+            <label class="field"><span class="label">Seed</span>
+              <span class="input-btn"><input id="seed" type="number" min="0" max="2147483647" placeholder="random"><button id="dice" class="icon-btn" type="button" aria-label="Random seed" title="Random seed"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r="1.2" fill="currentColor"/><circle cx="15" cy="15" r="1.2" fill="currentColor"/><circle cx="15" cy="9" r="1.2" fill="currentColor"/><circle cx="9" cy="15" r="1.2" fill="currentColor"/></svg></button></span></label>
+            <label class="field"><span class="label">Variations</span>
+              <select id="variations"><option>1</option><option>2</option><option>3</option><option>4</option></select></label>
+          </div>
+          <label class="field"><span class="label">Name (optional)</span><input id="asset-name" maxlength="80" placeholder="Named from the prompt or file"></label>
+        </details>
+
+        <div class="generate-bar">
+          <button id="generate" class="btn primary wide big" type="button"><span id="generate-label">Generate 3D model</span> <kbd>Ctrl</kbd><kbd>Enter</kbd></button>
+          <p id="estimate" class="muted small center"></p>
+        </div>
+      </aside>
+
+      <div class="stage" id="stage">
+        <div id="viewport" class="viewport" aria-label="3D viewport"></div>
+        <div class="vp-toolbar" role="toolbar" aria-label="Viewport">
+          <div class="segmented compact" id="view-mode" aria-label="Display">
+            <button data-v="lit" title="Lit with PBR materials (1)">Lit</button>
+            <button data-v="base" title="Base colour only (2)">Color</button>
+            <button data-v="clay" title="Clay (3)">Clay</button>
+            <button data-v="wire" title="Wireframe (4)">Wire</button>
+            <button data-v="normals" title="Normals (5)">Normals</button>
+            <button data-v="uv" title="UV checker (6)">UV</button>
+          </div>
+          <select id="env" aria-label="Lighting" title="Lighting">
+            <option value="studio">Studio</option><option value="sunset">Sunset</option>
+            <option value="overcast">Overcast</option><option value="night">Night</option>
+          </select>
+          <button class="icon-btn" id="turntable" aria-pressed="false" title="Turntable (T)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4"/></svg></button>
+          <button class="icon-btn" id="grid" aria-pressed="true" title="Grid (G)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h16M4 15h16M9 4v16M15 4v16"/><rect x="4" y="4" width="16" height="16" rx="2"/></svg></button>
+          <button class="icon-btn" id="frame" title="Frame model (F)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/><circle cx="12" cy="12" r="2.5"/></svg></button>
+          <button class="icon-btn" id="shot" title="Save a screenshot"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8a2 2 0 0 1 2-2h2l1.5-2h5L16 6h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><circle cx="12" cy="12.5" r="3.5"/></svg></button>
+          <button class="icon-btn" id="fullscreen" title="Fullscreen"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></button>
+        </div>
+        <div id="job-card" class="job-card" hidden></div>
+        <div id="vp-stats" class="vp-stats" hidden></div>
+        <div id="vp-empty" class="vp-empty">
+          <h1>Make something <em>beautiful</em>.</h1>
+          <p>Describe an object or drop in a picture. Atelier3D sculpts it, paints it with PBR materials and bakes it into a ready-to-use model, entirely on this PC.</p>
+        </div>
+      </div>
+
+      <aside class="panel right" aria-label="Details">
+        <div id="asset-panel" class="asset-panel" hidden></div>
+        <section class="queue-section">
+          <h2>Queue</h2>
+          <ul id="queue" class="queue"></ul>
+          <p id="queue-empty" class="muted small">Nothing running.</p>
+        </section>
+        <section>
+          <div class="label-row"><h2>Recent</h2><a class="link" href="#/library">Library &rarr;</a></div>
+          <div id="recent" class="recent"></div>
+        </section>
+      </aside>
+    </section>
+
+    <!-- ================================================================ LIBRARY -->
+    <section id="view-library" class="view page" data-view="library" hidden>
+      <div class="page-head">
+        <h1>Library</h1>
+        <div class="page-tools">
+          <input id="lib-search" type="search" placeholder="Search names" aria-label="Search">
+          <div class="segmented compact" id="lib-filter">
+            <button data-v="all">All</button><button data-v="fav">&#9733; Favourites</button>
+            <button data-v="text">Text</button><button data-v="image">Image</button><button data-v="multiview">Multi-view</button>
+          </div>
+        </div>
+      </div>
+      <div id="lib-grid" class="lib-grid"></div>
+      <p id="lib-empty" class="muted center" hidden>No models yet. Head to <a href="#/create">Create</a>.</p>
+    </section>
+
+    <!-- ================================================================ MODELS -->
+    <section id="view-models" class="view page" data-view="models" hidden>
+      <div class="page-head">
+        <h1>Models &amp; engine</h1>
+        <div class="page-tools">
+          <span id="disk" class="muted small"></span>
+          <button id="link-models" class="btn" type="button">Find models on this PC</button>
+        </div>
+      </div>
+      <div id="engine-card" class="card engine-card"></div>
+      <div id="packs" class="packs"></div>
+      <p class="muted small">Model files live in <code>models/</code>. A model found elsewhere on the same drive is hard-linked: it shows up here without using any extra disk space.</p>
+    </section>
+  </main>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+  <dialog id="modal"><div id="modal-body"></div></dialog>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

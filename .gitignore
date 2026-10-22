@@ -1,0 +1,15 @@
+# environments and the engine (installed by Atelier3D.bat)
+.venv/
+engine/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# your models, creations and studio state never go to git
+models/
+outputs/
+data/
+
+# tools
+.playwright-mcp/
+*.log

@@ -1,0 +1,23 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # GPU-free: the studio runs on its demo engine, so neither torch nor ComfyUI is needed.
+      - run: python -m pip install -r requirements.txt pytest
+      - if: runner.os == 'Linux'
+        run: python -m pip install playwright==1.49.1 && python -m playwright install --with-deps chromium
+      - run: python -m pytest tests -q -rs
