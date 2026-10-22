@@ -73,7 +73,10 @@ def create_app() -> FastAPI:
             if request.method not in ("GET", "HEAD") and origin and origin != "null":
                 if urlsplit(origin).hostname not in _LOOPBACK:
                     return JSONResponse({"detail": "cross-site request refused"}, status_code=403)
-        return await call_next(request)
+        response = await call_next(request)
+        # revalidate the UI's files (ETag) so an updated studio never runs stale JS/CSS
+        response.headers.setdefault("Cache-Control", "no-cache")
+        return response
 
     # ------------------------------------------------------------ status & events
 

@@ -13,7 +13,7 @@ import zipfile
 from pathlib import Path
 
 _SCRIPT = r"""
-import sys, bpy
+import os, sys, bpy
 src, dst, fmt = sys.argv[sys.argv.index("--") + 1:]
 bpy.ops.wm.read_factory_settings(use_empty=True)
 bpy.ops.import_scene.gltf(filepath=src)
@@ -21,7 +21,14 @@ if fmt == "fbx":
     bpy.ops.export_scene.fbx(filepath=dst, path_mode="COPY", embed_textures=True,
                              axis_forward="-Z", axis_up="Y")
 else:
-    bpy.ops.wm.obj_export(filepath=dst, export_materials=True, path_mode="COPY",
+    # GLB textures are embedded: write them next to the .obj so the .mtl can point at them
+    folder = os.path.dirname(dst)
+    for img in bpy.data.images:
+        if img.size[0]:
+            img.filepath_raw = os.path.join(folder, bpy.path.clean_name(img.name) + ".png")
+            img.file_format = "PNG"
+            img.save()
+    bpy.ops.wm.obj_export(filepath=dst, export_materials=True, path_mode="STRIP",
                           export_pbr_extensions=True)
 """
 
@@ -51,10 +58,8 @@ def export(glb_path: Path, fmt: str, timeout: int = 300) -> Path:
     work = out_dir / fmt
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir(parents=True)
-    script = out_dir / "convert.py"
-    script.write_text(_SCRIPT)
     dst = work / f"model.{fmt}"
-    r = subprocess.run([blender, "-b", "--factory-startup", "-noaudio", "--python", str(script),
+    r = subprocess.run([blender, "-b", "--factory-startup", "-noaudio", "--python-expr", _SCRIPT,
                         "--", str(glb_path), str(dst), fmt],
                        capture_output=True, text=True, timeout=timeout)
     if r.returncode != 0 or not dst.exists():

@@ -76,3 +76,14 @@ def test_fbx_export_without_blender(tmp_path, monkeypatch):
         exporters.export(p, "fbx")
     with pytest.raises(ValueError):
         exporters.export(p, "max")
+
+
+@pytest.mark.skipif(not exporters.find_blender(), reason="Blender not installed")
+def test_blender_exports_carry_textures(tmp_path):
+    import zipfile
+
+    p = tmp_path / "model.glb"
+    p.write_bytes(demo_glb(random.Random(3)))
+    assert b"\x89PNG" in exporters.export(p, "fbx").read_bytes()  # texture embedded
+    names = zipfile.ZipFile(exporters.export(p, "obj")).namelist()
+    assert {"model.obj", "model.mtl"} <= set(names) and any(n.endswith(".png") for n in names)

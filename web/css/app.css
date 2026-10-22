@@ -317,7 +317,10 @@ dialog::backdrop { background: rgba(5, 6, 8, .65); backdrop-filter: blur(2px); }
   .panel.right > * { flex: 1 1 260px; }
 }
 @media (max-width: 760px) {
-  body { overflow: auto; }
+  body { overflow-x: hidden; overflow-y: auto; }
+  .tabs a { padding: 7px 9px; }
+  .top-right .badge, #engine-pill span { display: none; }
+  #engine-pill { padding: 0 10px; }
   main { display: block; }
   .topbar { gap: 12px; padding: 0 12px; }
   .wordmark { display: none; }
