@@ -87,3 +87,32 @@ def test_blender_exports_carry_textures(tmp_path):
     assert b"\x89PNG" in exporters.export(p, "fbx").read_bytes()  # texture embedded
     names = zipfile.ZipFile(exporters.export(p, "obj")).namelist()
     assert {"model.obj", "model.mtl"} <= set(names) and any(n.endswith(".png") for n in names)
+
+
+def test_engine_stop_kills_the_whole_process_tree():
+    """The engine runs under a venv python.exe, which on Windows is a launcher with the real
+    interpreter as its child; stop() must not leave that child holding RAM and VRAM."""
+    import socket
+    import subprocess
+    import sys
+    import time
+
+    from atelier.engine import EngineProcess
+
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    child = (f"import socket,time; s=socket.socket(); s.bind(('127.0.0.1',{port})); s.listen(); "
+             "time.sleep(120)")
+    e = EngineProcess()
+    e.proc = subprocess.Popen([sys.executable, "-c", child])
+    for _ in range(100):
+        try:
+            socket.create_connection(("127.0.0.1", port), timeout=0.2).close()
+            break
+        except OSError:
+            time.sleep(0.1)
+    e.stop()
+    time.sleep(0.5)
+    with pytest.raises(OSError):
+        socket.create_connection(("127.0.0.1", port), timeout=0.5).close()
