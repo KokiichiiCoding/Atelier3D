@@ -577,6 +577,15 @@ function renderAssetPanel() {
         const blob = await viewer.snapshot();
         save(blob, `${slug(a.name)}.png`);
       } }, 'Screenshot'),
+      h('button.btn.small', { type: 'button', title: 'A 6-second spin of the viewport, for sharing', onclick: async (e) => {
+        const b = e.currentTarget;
+        b.disabled = true;
+        b.textContent = 'Recording...';
+        try { save(await viewer.recordTurntable(6), `${slug(a.name)}_turntable.webm`); }
+        catch (err) { toast(err.message, 'bad'); }
+        b.disabled = false;
+        b.textContent = 'Turntable video';
+      } }, 'Turntable video'),
       h('button.btn.small.danger', { type: 'button', onclick: () => deleteAsset(a) }, 'Delete')));
 }
 

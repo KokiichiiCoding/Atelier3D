@@ -47,7 +47,7 @@ Read this whole file before changing anything, and keep it current when you fini
 |---|---|
 | Run (real) | `Atelier3D.bat` or `.venv\Scripts\python.exe -m atelier --open` (port 7870) |
 | Run (demo, no GPU) | `.venv\Scripts\python.exe -m atelier --demo --port 7871` |
-| Tests (no GPU) | `.venv\Scripts\python.exe -m pytest tests -q` (44 unit/API + 1 browser e2e) |
+| Tests (no GPU) | `.venv\Scripts\python.exe -m pytest tests -q` (45 unit/API + 1 browser e2e) |
 | e2e locally | set `ATELIER_E2E_BROWSER=C:\Users\Kokii\AppData\Local\ms-playwright\chromium-1243\chrome-win64\chrome.exe` |
 | Graphs vs real engine | `engine\.venv\Scripts\python.exe scripts\validate_graphs.py` (no GPU, ~2-10 min: imports all nodes) |
 | (Re)install engine | `.venv\Scripts\python.exe scripts\setup_engine.py` (idempotent, stamp in engine/.venv) |
@@ -95,7 +95,7 @@ tests/fixtures/object_info.json   node schemas of the nodes we use, dumped from 
 ## 7. Status (2026-10-22) and what is NOT verified yet
 
 Done and verified:
-- Studio, queue, library, model manager, exports, demo engine: 44 pytest + browser e2e pass.
+- Studio, queue, library, model manager, exports, demo engine: 45 pytest + browser e2e pass.
 - All three Pixal3D quality presets pass the **real engine's** prompt validation
   (`validate_graphs.py`); TRELLIS.2 / multi-view / concept graphs are checked against the
   engine's node schemas offline (their models are not installed).

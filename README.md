@@ -31,7 +31,8 @@ image ─────────────────┘     (BiRefNet, MoGe
 - **Watch it being made.** Live stage tracker with ETA, the blocked-out structure appears in
   the viewport within seconds, then the painted mesh, then the final baked model.
 - **A proper viewport.** Lit PBR, base colour, clay, wireframe, normals and UV-checker views;
-  studio / sunset / overcast / night lighting; turntable; screenshots. Keys `1`-`6`, `T`, `G`, `F`.
+  studio / sunset / overcast / night lighting; turntable; screenshots and one-click 6-second
+  turntable videos (WebM) for sharing. Keys `1`-`6`, `T`, `G`, `F`.
 - **Exports for every tool.** GLB (original), FBX and textured OBJ through your Blender
   install, USDZ (AR Quick Look), STL (printing) and PLY in the browser, plus a zip of all maps.
 - **Library.** Search, favourites, rename, delete, remix with a new seed, or redo in High
@@ -113,7 +114,7 @@ need no compiled extensions, and its memory manager is built to fit big models o
 ## Development
 
 ```bash
-.venv\Scripts\python -m pytest tests -q          # 45 tests, GPU-free (demo engine)
+.venv\Scripts\python -m pytest tests -q          # 46 tests, GPU-free (demo engine + browser e2e)
 engine\.venv\Scripts\python scripts\validate_graphs.py   # graphs vs the real engine, no GPU
 .venv\Scripts\python -m atelier --demo --port 7871
 ```

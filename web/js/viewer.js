@@ -194,6 +194,28 @@ export class Viewer {
     return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
   }
 
+  /** Record one full turntable orbit of the viewport as a WebM video. */
+  async recordTurntable(seconds = 6) {
+    if (!this.model || !window.MediaRecorder) throw new Error('video recording is not supported here');
+    const stream = this.renderer.domElement.captureStream(30);
+    const type = ['video/webm;codecs=vp9', 'video/webm'].find((t) => MediaRecorder.isTypeSupported(t));
+    const rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 8e6 });
+    const chunks = [];
+    rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+    const was = { on: this.controls.autoRotate, speed: this.controls.autoRotateSpeed };
+    this.controls.autoRotateSpeed = 60 / seconds;  // OrbitControls: speed 2 = one orbit per 30 s
+    this.controls.autoRotate = true;
+    this.scene.background = studioBackdrop();  // the canvas is transparent; video has no alpha
+    rec.start();
+    await new Promise((r) => setTimeout(r, seconds * 1000));
+    await new Promise((r) => { rec.onstop = r; rec.stop(); });
+    Object.assign(this.controls, { autoRotate: was.on, autoRotateSpeed: was.speed });
+    this.scene.background.dispose();
+    this.scene.background = null;
+    stream.getTracks().forEach((t) => t.stop());
+    return new Blob(chunks, { type: 'video/webm' });
+  }
+
   /** Export the loaded model in the browser: stl | ply | usdz | obj. Returns a Blob. */
   async exportAs(fmt) {
     if (!this.model) throw new Error('nothing loaded');
@@ -235,6 +257,21 @@ function disposeTree(root, keep = new Set()) {
       m.dispose();
     }
   });
+}
+
+function studioBackdrop() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 512;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(256, 200, 10, 256, 256, 380);
+  grad.addColorStop(0, '#2a2d36');
+  grad.addColorStop(0.5, '#1a1c22');
+  grad.addColorStop(1, '#0f1013');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 512, 512);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }
 
 function blobShadow() {
