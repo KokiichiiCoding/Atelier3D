@@ -16,7 +16,8 @@ from .jobs import Context
 _NODE_COST = {"KSampler": 10, "RemeshMesh": 3, "UnwrapMesh": 3, "BakeTextureFromVoxel": 3,
               "BakeAmbientOcclusion": 3, "BakeNormalMapFromMesh": 2, "MoGeInference": 2,
               "RemoveBackground": 2, "UNETLoader": 2, "CheckpointLoaderSimple": 3,
-              "VaeDecodeShapeTrellis": 2, "VaeDecodeTextureTrellis": 2, "VAEDecode": 2}
+              "VaeDecodeShapeTrellis": 2, "VaeDecodeTextureTrellis": 2, "VAEDecode": 2,
+              "AtelierProjectImage": 2}
 PREVIEWS = {"input": "input", "preview_structure": "structure", "preview_painted": "painted"}
 MAP_FILES = {"map_base_color": "maps/base_color.png", "map_metallic": "maps/metallic.png",
              "map_roughness": "maps/roughness.png", "map_normal": "maps/normal.png",
@@ -151,7 +152,7 @@ async def _model(job: dict, ctx: Context, backend) -> dict:
     await ctx.progress(stage="prepare", label="Starting the engine", overall=0.0, stages=[], eta=None)
     await backend.ensure()
     common = dict(seed=int(p["seed"]), quality=p["quality"], faces=int(p["faces"]),
-                  texture=int(p["texture"]))
+                  texture=int(p["texture"]), photo_paint=bool(p.get("photo_paint", True)))
     if job["kind"] == "multiview3d":
         views = {v: await backend.upload(Path(path)) for v, path in p["views"].items()}
         graph = graphs.image_to_3d(views=views, **common)

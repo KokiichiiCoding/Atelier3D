@@ -71,6 +71,124 @@
   "python_module": "comfy_extras.nodes_mesh_postprocess",
   "search_aliases": null
  },
+ "AtelierProjectImage": {
+  "api_node": false,
+  "category": "3d/texturing",
+  "deprecated": false,
+  "description": "Sharpen a baked base colour with the pixel-aligned input image (Pixal3D camera).",
+  "dev_only": false,
+  "display_name": "Project Image Onto Texture (Atelier3D)",
+  "essentials_category": null,
+  "experimental": false,
+  "has_intermediate_output": false,
+  "input": {
+   "required": {
+    "azimuth": [
+     "FLOAT",
+     {
+      "default": 0.0,
+      "max": 360.0,
+      "min": -360.0,
+      "step": 90.0,
+      "tooltip": "0 = front view; multi-view rigs: 90 left, 180 back, 270 right."
+     }
+    ],
+    "base_color": [
+     "IMAGE",
+     {}
+    ],
+    "detail_sigma": [
+     "FLOAT",
+     {
+      "default": 12.0,
+      "max": 64.0,
+      "min": 1.0,
+      "step": 0.5,
+      "tooltip": "Pixels (at 1024) below which detail comes from the photo."
+     }
+    ],
+    "distance_scale": [
+     "FLOAT",
+     {
+      "default": 1.0,
+      "max": 2.0,
+      "min": 0.5,
+      "step": 0.01,
+      "tooltip": "1.0 for single-image Pixal3D, 1.1 for the multi-view rig."
+     }
+    ],
+    "fov": [
+     "FLOAT",
+     {
+      "default": 49.13,
+      "max": 170.0,
+      "min": 1.0,
+      "step": 0.01,
+      "tooltip": "Horizontal FOV in degrees, the one the conditioning used."
+     }
+    ],
+    "image": [
+     "IMAGE",
+     {
+      "tooltip": "The cropped input exactly as the conditioning saw it."
+     }
+    ],
+    "mask": [
+     "MASK",
+     {
+      "tooltip": "The subject mask, cropped like the image."
+     }
+    ],
+    "mesh": [
+     "MESH",
+     {
+      "tooltip": "The UV-unwrapped mesh the base colour was baked on."
+     }
+    ],
+    "strength": [
+     "FLOAT",
+     {
+      "default": 1.0,
+      "max": 1.0,
+      "min": 0.0,
+      "step": 0.05
+     }
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "mesh",
+    "base_color",
+    "image",
+    "mask",
+    "fov",
+    "azimuth",
+    "distance_scale",
+    "strength",
+    "detail_sigma"
+   ]
+  },
+  "is_input_list": false,
+  "name": "AtelierProjectImage",
+  "output": [
+   "IMAGE"
+  ],
+  "output_is_list": [
+   false
+  ],
+  "output_matchtypes": null,
+  "output_name": [
+   "base_color"
+  ],
+  "output_node": false,
+  "output_tooltips": [
+   null
+  ],
+  "price_badge": null,
+  "python_module": "custom_nodes.atelier3d",
+  "search_aliases": null
+ },
  "BakeAmbientOcclusion": {
   "api_node": false,
   "category": "3d/texturing",
@@ -1076,6 +1194,65 @@
    "pixal3d"
   ]
  },
+ "ImageToMask": {
+  "api_node": false,
+  "category": "image/mask",
+  "deprecated": false,
+  "description": "",
+  "dev_only": false,
+  "display_name": "Convert Image to Mask",
+  "essentials_category": null,
+  "experimental": false,
+  "has_intermediate_output": false,
+  "input": {
+   "required": {
+    "channel": [
+     "COMBO",
+     {
+      "multiselect": false,
+      "options": [
+       "red",
+       "green",
+       "blue",
+       "alpha"
+      ]
+     }
+    ],
+    "image": [
+     "IMAGE",
+     {}
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "image",
+    "channel"
+   ]
+  },
+  "is_input_list": false,
+  "name": "ImageToMask",
+  "output": [
+   "MASK"
+  ],
+  "output_is_list": [
+   false
+  ],
+  "output_matchtypes": null,
+  "output_name": [
+   "MASK"
+  ],
+  "output_node": false,
+  "output_tooltips": [
+   null
+  ],
+  "price_badge": null,
+  "python_module": "comfy_extras.nodes_mask",
+  "search_aliases": [
+   "extract channel",
+   "channel to mask"
+  ]
+ },
  "KSampler": {
   "category": "model/sampling",
   "description": "Uses the provided model, positive and negative conditioning to denoise the latent image.",
@@ -1400,6 +1577,51 @@
   "price_badge": null,
   "python_module": "comfy_extras.nodes_moge",
   "search_aliases": null
+ },
+ "MaskToImage": {
+  "api_node": false,
+  "category": "image/mask",
+  "deprecated": false,
+  "description": "",
+  "dev_only": false,
+  "display_name": "Convert Mask to Image",
+  "essentials_category": null,
+  "experimental": false,
+  "has_intermediate_output": false,
+  "input": {
+   "required": {
+    "mask": [
+     "MASK",
+     {}
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "mask"
+   ]
+  },
+  "is_input_list": false,
+  "name": "MaskToImage",
+  "output": [
+   "IMAGE"
+  ],
+  "output_is_list": [
+   false
+  ],
+  "output_matchtypes": null,
+  "output_name": [
+   "IMAGE"
+  ],
+  "output_node": false,
+  "output_tooltips": [
+   null
+  ],
+  "price_badge": null,
+  "python_module": "comfy_extras.nodes_mask",
+  "search_aliases": [
+   "convert mask"
+  ]
  },
  "MeshSmoothNormals": {
   "api_node": false,

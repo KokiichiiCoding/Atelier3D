@@ -107,17 +107,21 @@
           <div class="row2">
             <label class="field"><span class="label">Polycount</span>
               <select id="faces">
+                <option value="10000">10k &middot; mobile</option>
                 <option value="30000">30k &middot; game-ready</option>
                 <option value="80000">80k</option>
                 <option value="150000" selected>150k</option>
                 <option value="300000">300k</option>
                 <option value="700000">700k &middot; film</option>
+                <option value="1000000">1M</option>
+                <option value="2000000">2M &middot; ultra</option>
               </select></label>
             <div class="field"><span class="label">Texture</span>
               <div class="segmented compact" id="texture" role="radiogroup" aria-label="Texture size">
                 <button data-v="1024">1K</button><button data-v="2048">2K</button><button data-v="4096">4K</button>
               </div></div>
           </div>
+          <label class="switch" id="photo-paint-field" title="Pixal3D builds the model aligned with your picture, so its sharp pixels can be painted back onto the side it shows"><input id="photo-paint" type="checkbox" checked><span></span>Photo-sharp paint (projects your image onto the front)</label>
           <div class="row2">
             <label class="field"><span class="label">Seed</span>
               <span class="input-btn"><input id="seed" type="number" min="0" max="2147483647" placeholder="random"><button id="dice" class="icon-btn" type="button" aria-label="Random seed" title="Random seed"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r="1.2" fill="currentColor"/><circle cx="15" cy="15" r="1.2" fill="currentColor"/><circle cx="15" cy="9" r="1.2" fill="currentColor"/><circle cx="9" cy="15" r="1.2" fill="currentColor"/></svg></button></span></label>

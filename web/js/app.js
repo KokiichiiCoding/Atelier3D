@@ -1,6 +1,6 @@
 // Atelier3D studio: routing, live state, the Create view (inputs, job card, asset panel, queue).
 import { api, subscribe } from './api.js';
-import { $, $$, h, fill, toast, prefs, segmented, fmtBytes, fmtCount, fmtDuration, fmtDate, confirmDialog, openModal } from './ui.js';
+import { $, $$, h, fill, toast, prefs, segmented, fmtBytes, fmtCount, fmtDuration, fmtDate, confirmDialog, openModal, closeModal } from './ui.js';
 import { Viewer } from './viewer.js';
 import { initPages, renderLibrary, renderModels, onModelEvent } from './pages.js';
 
@@ -201,12 +201,15 @@ function initCreate() {
   showMode(mode);
 
   ui.quality = segmented($('#quality'), (v) => { prefs.set('quality', v); renderEstimate(); }, prefs.get('quality', 'standard'));
-  ui.engine = segmented($('#engine'), (v) => prefs.set('engine', v), prefs.get('engine', 'pixal3d'));
+  ui.engine = segmented($('#engine'), (v) => { prefs.set('engine', v); renderPhotoPaint(); }, prefs.get('engine', 'pixal3d'));
   ui.texture = segmented($('#texture'), (v) => prefs.set('texture', v), prefs.get('texture', '2048'));
   bindPref('#faces', 'faces');
   bindPref('#variations', 'variations');
   bindPref('#concept-count', 'conceptCount');
   bindPref('#t2i-model', 't2i');
+  $('#photo-paint').checked = prefs.get('photoPaint', true);
+  $('#photo-paint').addEventListener('change', (e) => prefs.set('photoPaint', e.target.checked));
+  renderPhotoPaint();
   $('#character').checked = prefs.get('character', false);
   $('#character').addEventListener('change', (e) => prefs.set('character', e.target.checked));
   $('#prompt').value = prefs.get('prompt', '');
@@ -281,7 +284,18 @@ function dropTarget(el, onFile) {
 function showMode(m) {
   for (const p of $$('.mode-pane')) p.hidden = p.dataset.pane !== m;
   $('#engine-field').hidden = m === 'multiview';
+  renderPhotoPaint();
   renderGenerateButton();
+}
+
+// Only Pixal3D is pixel-aligned with its input, so TRELLIS.2 keeps the plain voxel bake.
+function renderPhotoPaint() {
+  const multi = ui.mode?.get() === 'multiview';
+  const off = !multi && ui.engine?.get() === 'trellis2';
+  $('#photo-paint').disabled = off;
+  $('#photo-paint-field').classList.toggle('disabled', off);
+  $('#photo-paint-field').lastChild.textContent = off ? 'Photo-sharp paint (Pixal3D only)'
+    : `Photo-sharp paint (projects your ${multi ? 'views onto the model' : 'image onto the front'})`;
 }
 
 function setImage(f) {
@@ -318,6 +332,7 @@ function settings3d() {
   return {
     quality: ui.quality.get(), faces: Number($('#faces').value), texture: Number(ui.texture.get()),
     engine: ui.engine.get(), variations: Number($('#variations').value), name: $('#asset-name').value.trim(),
+    photo_paint: $('#photo-paint').checked,
     ...(seed ? { seed: Number(seed) } : {}),
   };
 }
@@ -556,6 +571,7 @@ function renderAssetPanel() {
     src.prompt ? h('div.source', {}, src.prompt) : null,
     h('div.downloads', {},
       h('a.btn.primary.main', { href: `/api/assets/${a.id}/download/glb`, download: '' }, 'Download GLB'),
+      blender ? dl('draco', 'GLB · Draco', 'Compressed GLB, several times smaller (needs a Draco-aware loader)') : null,
       blender ? dl('fbx', 'FBX', 'Converted by Blender') : h('button.btn', { type: 'button', disabled: true, title: 'Install Blender for FBX' }, 'FBX'),
       blender ? dl('obj', 'OBJ', 'OBJ + MTL + textures (Blender)') : client('obj', 'OBJ'),
       client('usdz', 'USDZ'), client('stl', 'STL'), client('ply', 'PLY'),
@@ -568,11 +584,14 @@ function renderAssetPanel() {
       h('dt', {}, 'Engine'), h('dd', {}, a.kind === 'multiview3d' ? 'Pixal3D multi-view' : p.engine === 'trellis2' ? 'TRELLIS.2' : 'Pixal3D'),
       h('dt', {}, 'Polycount'), h('dd', {}, `${fmtCount(p.faces)} target`),
       h('dt', {}, 'Texture'), h('dd', {}, p.texture ? `${p.texture / 1024}K` : '-'),
+      h('dt', {}, 'Paint'), h('dd', {}, p.engine === 'trellis2' && a.kind !== 'multiview3d' ? 'Voxel bake'
+        : p.photo_paint === false ? 'Voxel bake' : 'Voxel bake + photo'),
       h('dt', {}, 'Seed'), h('dd', {}, String(p.seed ?? '-')),
       h('dt', {}, 'Build time'), h('dd', {}, fmtDuration(a.seconds) || '-')),
     h('div.actions', {},
       h('button.btn.small', { type: 'button', title: 'Same input, new seed', onclick: () => remix(a, {}) }, 'Remix'),
       p.quality !== 'high' ? h('button.btn.small', { type: 'button', onclick: () => remix(a, { quality: 'high', seed: p.seed }) }, 'Redo in High') : null,
+      h('button.btn.small', { type: 'button', title: 'Same shape, new polycount or texture size', onclick: () => rebuildDialog(a) }, 'Rebuild...'),
       h('button.btn.small', { type: 'button', onclick: async () => {
         const blob = await viewer.snapshot();
         save(blob, `${slug(a.name)}.png`);
@@ -604,6 +623,27 @@ async function exportClient(a, fmt) {
     if (S.asset?.id !== a.id) await selectAsset(a);
     save(await viewer.exportAs(fmt), `${slug(a.name)}.${fmt}`);
   } catch (e) { toast(`Export failed: ${e.message}`, 'bad'); }
+}
+
+function rebuildDialog(a) {
+  const p = a.params || {};
+  const faces = $('#faces').cloneNode(true);
+  faces.removeAttribute('id');
+  faces.value = String(p.faces);
+  if (faces.value !== String(p.faces)) faces.value = '150000';
+  const tex = h('select', {}, [1024, 2048, 4096].map((t) => h('option', { value: t, selected: t === p.texture }, `${t / 1024}K`)));
+  openModal(
+    h('h3', {}, `Rebuild "${a.name}"`),
+    h('p', {}, 'Same input and seed, so the same shape. If the engine still has it in memory (nothing else ran since), only the remesh and the bakes run again.'),
+    h('div.row2', {},
+      h('label.field', {}, h('span.label', {}, 'Polycount'), faces),
+      h('label.field', {}, h('span.label', {}, 'Texture'), tex)),
+    h('div.modal-actions', {},
+      h('button.btn.ghost', { type: 'button', onclick: closeModal }, 'Cancel'),
+      h('button.btn.primary', { type: 'button', onclick: () => {
+        closeModal();
+        remix(a, { seed: p.seed, faces: Number(faces.value), texture: Number(tex.value) });
+      } }, 'Rebuild')));
 }
 
 async function remix(a, overrides) {

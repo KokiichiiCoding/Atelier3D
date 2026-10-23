@@ -32,6 +32,12 @@ _LOOPBACK = {"127.0.0.1", "localhost", "::1", "[::1]"}
 MAX_SEED = 2**31 - 1
 
 
+def _flag(v) -> bool:
+    """A form/JSON switch. (FastAPI reads a *missing* bool form field as False, like an HTML
+    checkbox, so switches that default to on arrive as strings.)"""
+    return v.strip().lower() not in ("false", "0", "off", "no", "") if isinstance(v, str) else bool(v)
+
+
 def _bad(msg: str, code: int = 400):
     raise HTTPException(code, msg)
 
@@ -184,7 +190,7 @@ def create_app() -> FastAPI:
     # ------------------------------------------------------------ generation
 
     def model_params(quality: str, faces: int, texture: int, engine_name: str, seed: int | None,
-                     name: str = "") -> dict:
+                     name: str = "", photo_paint: bool = True) -> dict:
         try:
             graphs.check_params(quality, int(faces), int(texture))
         except ValueError as e:
@@ -197,7 +203,7 @@ def create_app() -> FastAPI:
             _bad("seed out of range")
         return {"quality": quality, "faces": int(faces), "texture": int(texture),
                 "engine": engine_name, "seed": int(seed) if seed is not None else None,
-                "name": name.strip()[:80]}
+                "name": name.strip()[:80], "photo_paint": _flag(photo_paint)}
 
     async def submit_variations(kind: str, params: dict, variations: int) -> list[dict]:
         if not 1 <= variations <= 4:
@@ -218,9 +224,9 @@ def create_app() -> FastAPI:
                              faces: int = Form(150_000), texture: int = Form(2048),
                              engine_name: str = Form("pixal3d", alias="engine"),
                              seed: int | None = Form(None), variations: int = Form(1),
-                             name: str = Form("")):
+                             name: str = Form(""), photo_paint: str = Form("true")):
         need("image3d")
-        params = model_params(quality, faces, texture, engine_name, seed, name)
+        params = model_params(quality, faces, texture, engine_name, seed, name, photo_paint)
         path = await _save_upload(image)
         params.update(image=str(path), source={"mode": "image", "filename": image.filename})
         return {"jobs": await submit_variations("image3d", params, variations)}
@@ -231,9 +237,10 @@ def create_app() -> FastAPI:
                                  right: UploadFile | None = File(None),
                                  quality: str = Form("standard"), faces: int = Form(150_000),
                                  texture: int = Form(2048), seed: int | None = Form(None),
-                                 variations: int = Form(1), name: str = Form("")):
+                                 variations: int = Form(1), name: str = Form(""),
+                                 photo_paint: str = Form("true")):
         need("multiview")
-        params = model_params(quality, faces, texture, "pixal3d", seed, name)
+        params = model_params(quality, faces, texture, "pixal3d", seed, name, photo_paint)
         views = {"front": str(await _save_upload(front))}
         for v, up in (("left", left), ("back", back), ("right", right)):
             if up is not None and up.filename:
@@ -279,7 +286,7 @@ def create_app() -> FastAPI:
             _bad("no such concept image", 404)
         params = model_params(body.get("quality", "standard"), body.get("faces", 150_000),
                               body.get("texture", 2048), body.get("engine", "pixal3d"),
-                              body.get("seed"), body.get("name", ""))
+                              body.get("seed"), body.get("name", ""), body.get("photo_paint", True))
         dest = CFG.uploads_dir / f"{new_id()}.png"
         shutil.copyfile(src, dest)
         params.update(image=str(dest), source={"mode": "text", "prompt": cjob["params"]["prompt"],
@@ -299,7 +306,8 @@ def create_app() -> FastAPI:
             _bad("the original input image was deleted", 410)
         params = model_params(body.get("quality", old["quality"]), body.get("faces", old["faces"]),
                               body.get("texture", old["texture"]), body.get("engine", old["engine"]),
-                              body.get("seed"), body.get("name", asset["name"]))
+                              body.get("seed"), body.get("name", asset["name"]),
+                              body.get("photo_paint", old.get("photo_paint", True)))
         params.update({k: old[k] for k in ("image", "views", "source") if k in old})
         return {"jobs": await submit_variations(job["kind"], params, int(body.get("variations", 1)))}
 
@@ -387,14 +395,15 @@ def create_app() -> FastAPI:
             return FileResponse(adir / "model.glb", filename=f"{stem}.glb")
         if fmt == "textures":
             return FileResponse(exporters.textures_zip(adir), filename=f"{stem}_textures.zip")
-        if fmt in ("fbx", "obj"):
+        if fmt in exporters.TARGETS:
             try:
                 out = await asyncio.to_thread(exporters.export, adir / "model.glb", fmt)
             except FileNotFoundError as e:
                 _bad(str(e), 501)
             except RuntimeError as e:
                 _bad(str(e), 500)
-            return FileResponse(out, filename=f"{stem}.fbx" if fmt == "fbx" else f"{stem}_obj.zip")
+            names = {"fbx": f"{stem}.fbx", "obj": f"{stem}_obj.zip", "draco": f"{stem}_draco.glb"}
+            return FileResponse(out, filename=names[fmt])
         _bad("unknown format", 404)
 
     def _asset_or_404(aid: str) -> dict:

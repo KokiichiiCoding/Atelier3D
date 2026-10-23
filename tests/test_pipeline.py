@@ -87,6 +87,8 @@ def test_blender_exports_carry_textures(tmp_path):
     assert b"\x89PNG" in exporters.export(p, "fbx").read_bytes()  # texture embedded
     names = zipfile.ZipFile(exporters.export(p, "obj")).namelist()
     assert {"model.obj", "model.mtl"} <= set(names) and any(n.endswith(".png") for n in names)
+    small = exporters.export(p, "draco").read_bytes()
+    assert small[:4] == b"glTF" and b"KHR_draco_mesh_compression" in small and b"\x89PNG" in small
 
 
 def test_engine_stop_kills_the_whole_process_tree():

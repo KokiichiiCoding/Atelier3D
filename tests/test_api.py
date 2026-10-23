@@ -108,6 +108,20 @@ def test_remix_reuses_the_input(client):
     assert done["status"] == "done"
 
 
+def test_ultra_polycount_and_photo_paint_switch(client):
+    (job,) = _image(client, faces="2000000", texture="4096", photo_paint="false", seed="8")
+    assert job["params"]["faces"] == 2_000_000 and job["params"]["photo_paint"] is False
+    (done,) = wait_jobs(client, [job["id"]])
+    aid = done["result"]["asset"]
+    # a rebuild keeps the seed and the paint choice, with a new polycount
+    new = client.post(f"/api/assets/{aid}/remix", json={"seed": 8, "faces": 30000}).json()["jobs"][0]
+    assert (new["params"]["seed"], new["params"]["faces"], new["params"]["photo_paint"]) == (8, 30000, False)
+    assert _image(client)[0]["params"]["photo_paint"] is True
+    r = client.post("/api/generate/image", files={"image": ("t.png", png_bytes(), "image/png")},
+                    data={"faces": "2000001"})
+    assert r.status_code == 400 and "faces" in r.json()["detail"]
+
+
 def test_library_edit_thumb_and_delete(client):
     (job,) = wait_jobs(client, [_image(client)[0]["id"]])
     aid = job["result"]["asset"]

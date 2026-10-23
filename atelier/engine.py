@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import shutil
 import subprocess
 import time
 import uuid
@@ -19,9 +20,17 @@ from typing import Any, Awaitable, Callable
 import httpx
 import websockets
 
-from .config import CFG
+from .config import CFG, ROOT
 
 ENGINE_DIRS = ("custom_nodes", "input", "output", "temp", "user")
+NODES_SRC = ROOT / "engine_nodes"   # Atelier3D's own engine nodes, copied in on every start
+
+
+def install_nodes() -> None:
+    for pkg in NODES_SRC.iterdir():
+        if pkg.is_dir():
+            shutil.copytree(pkg, CFG.engine_data / "custom_nodes" / pkg.name, dirs_exist_ok=True,
+                            ignore=shutil.ignore_patterns("__pycache__"))
 
 
 class EngineError(RuntimeError):
@@ -188,6 +197,7 @@ class EngineProcess:
             await self._set("starting")
             for d in ENGINE_DIRS:
                 (CFG.engine_data / d).mkdir(parents=True, exist_ok=True)
+            install_nodes()
             CFG.models_dir.mkdir(parents=True, exist_ok=True)
             log = open(CFG.data_dir / "engine.log", "w", encoding="utf-8", errors="replace")
             args = [str(CFG.engine_python), str(CFG.engine_main), "--listen", "127.0.0.1",

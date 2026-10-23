@@ -20,9 +20,16 @@ image ─────────────────┘     (BiRefNet, MoGe
   (Tencent ARC, SIGGRAPH 2026) by default, which keeps flat colours, logos and faces true to the
   picture, and Microsoft's [TRELLIS.2](https://huggingface.co/microsoft/TRELLIS.2-4B) as a
   second engine for photos and soft 3D renders. Both run as int8 builds sized for 8 GB GPUs.
-- **Real PBR assets, not vertex-coloured blobs.** Every model is remeshed, decimated to the
-  polycount you choose (30k game-ready to 700k film), UV-unwrapped and baked to 1K/2K/4K
-  base colour, metallic, roughness, normal and ambient-occlusion maps.
+- **Real PBR assets, up to 2 million polygons.** Every model is remeshed, decimated to the
+  polycount you choose (10k mobile, 30k game-ready ... 700k film, 1M, 2M ultra; the remesh grid
+  grows with the target so 2M is real surface, not subdivision), UV-unwrapped and baked to
+  1K/2K/4K base colour, metallic, roughness, normal and ambient-occlusion maps.
+- **Photo-sharp paint.** Pixal3D builds the model pixel-aligned with your picture, so Atelier3D
+  projects the picture itself back onto the side it shows: fine detail (eyes, print, logos,
+  fabric) comes from your image, the broad colour from the model's own albedo bake, so lighting
+  in the photo does not get baked in and there is no seam where the projection fades out.
+  Multi-view jobs project every view from its rig camera. A silhouette check skips the
+  projection whenever the model does not line up with the picture.
 - **Text to 3D like the big studios.** Describe it, pick a style (stylised, realistic, anime,
   toy, low poly, sculpture), get up to four concepts, then build the one you like. The prompt is
   shaped for 3D (one centred subject, plain background, even light) and an A-pose switch makes
@@ -33,10 +40,12 @@ image ─────────────────┘     (BiRefNet, MoGe
 - **A proper viewport.** Lit PBR, base colour, clay, wireframe, normals and UV-checker views;
   studio / sunset / overcast / night lighting; turntable; screenshots and one-click 6-second
   turntable videos (WebM) for sharing. Keys `1`-`6`, `T`, `G`, `F`.
-- **Exports for every tool.** GLB (original), FBX and textured OBJ through your Blender
-  install, USDZ (AR Quick Look), STL (printing) and PLY in the browser, plus a zip of all maps.
-- **Library.** Search, favourites, rename, delete, remix with a new seed, or redo in High
-  quality with the same seed. Variations: build up to four seeds of one input in one click.
+- **Exports for every tool.** GLB (original), Draco-compressed GLB, FBX and textured OBJ
+  through your Blender install, USDZ (AR Quick Look), STL (printing) and PLY in the browser,
+  plus a zip of all maps.
+- **Library.** Search, favourites, rename, delete, remix with a new seed, redo in High quality
+  with the same seed, or **Rebuild** the same shape at another polycount / texture size.
+  Variations: build up to four seeds of one input in one click.
 - **Queue.** Line up as many jobs as you like and keep working; jobs survive a page reload,
   queued ones survive a restart.
 - **Model manager.** Download packs with resume and progress, or let "Find models on this PC"
@@ -46,9 +55,12 @@ image ─────────────────┘     (BiRefNet, MoGe
 
 ## Status
 
-Version 0.1. The studio, queue, library, exports and model manager are tested end to end on the
-demo engine, and the Pixal3D graphs pass the real engine's validation. Real-GPU timings will be
-added after the first runs on the target laptop (RTX 4070, 8 GB).
+Version 0.2. The studio, queue, library, exports and model manager are tested end to end on the
+demo engine, and the Pixal3D graphs (up to 2M faces, with photo paint) pass the real engine's
+validation. The photo-paint node is tested on the CPU against Pixal3D's own camera code, and the
+2M-face remesh / decimate / unwrap / bake chain has run on the CPU (about 15 minutes there, peak
+2.9 GB RAM). Real-GPU timings will be added after the first runs on the target laptop
+(RTX 4070, 8 GB).
 
 ## Requirements
 
@@ -104,7 +116,8 @@ Atelier3D.bat
      ├─ atelier/pipeline.py  graph -> engine -> stage progress, live previews, files
      ├─ atelier/graphs.py    the ComfyUI graphs, built in code (Pixal3D/TRELLIS.2, concepts)
      └─ engine  (engine/.venv: torch 2.14 cu130)  private port 8199
-         └─ ComfyUI 0.42.1, pinned, started and stopped by the studio
+         ├─ ComfyUI 0.42.1, pinned, started and stopped by the studio
+         └─ engine_nodes/atelier3d  our own node (photo paint), copied in at every start
 ```
 
 The engine is a stock ComfyUI release that Atelier3D installs into its own folder and drives
@@ -114,8 +127,9 @@ need no compiled extensions, and its memory manager is built to fit big models o
 ## Development
 
 ```bash
-.venv\Scripts\python -m pytest tests -q          # 47 tests, GPU-free (demo engine + browser e2e)
+.venv\Scripts\python -m pytest tests -q          # 60 tests, GPU-free (demo engine + browser e2e)
 engine\.venv\Scripts\python scripts\validate_graphs.py   # graphs vs the real engine, no GPU
+engine\.venv\Scripts\python scripts\test_engine_nodes.py # the photo-paint node, on the CPU
 .venv\Scripts\python -m atelier --demo --port 7871
 ```
 

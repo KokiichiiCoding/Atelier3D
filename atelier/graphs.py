@@ -8,6 +8,7 @@ named so the pipeline knows which saved file is which.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -19,11 +20,15 @@ QUALITY: dict[str, dict[str, int]] = {
     "high":     dict(ss_steps=12, shape_steps=20, refine_steps=12, tex_steps=12, upsample=1536, remesh=768),
 }
 TEXTURE_SIZES = (1024, 2048, 4096)
-FACE_LIMITS = (5_000, 1_000_000)
+FACE_LIMITS = (5_000, 2_000_000)
+REMESH_STEPS = (512, 768, 1024)
 ENGINES = {"pixal3d": "pixal3d_int8_convrot.safetensors",
            "trellis2": "trellis_2_int8_convrot.safetensors"}
 MULTIVIEW_UNET = "pixal3d_multiview_int8_convrot.safetensors"
 VIEWS = ("front", "left", "back", "right")
+
+_AZIMUTH = {"front": 0.0, "left": 90.0, "back": 180.0, "right": 270.0}
+MULTIVIEW_FOV, MULTIVIEW_PAD = 20.0, 1.1   # the rig Pixal3DMultiViewConditioning assumes
 
 STAGES_3D = [  # id, label, share of the total time (measured shares replace these later)
     ("prepare", "Preparing image", 0.08),
@@ -71,20 +76,35 @@ def check_params(quality: str, faces: int, texture: int) -> None:
         raise ValueError(f"texture must be one of {TEXTURE_SIZES}")
 
 
-def _cutout(g: Graph, image_name: str, bg_model: Ref, tag: str = "") -> Ref:
-    """Load an image, cut the subject out and frame it in a 1024 square (black background)."""
+def remesh_resolution(quality: str, faces: int) -> int:
+    """Remesh grid fine enough to decimate down to ``faces`` (the engine's rule of thumb:
+    512 gives about 1M faces, growing with the square), never coarser than the preset."""
+    need = 512 * math.sqrt(1.3 * faces / 1_000_000)
+    return max(QUALITY[quality]["remesh"], next((r for r in REMESH_STEPS if r >= need), REMESH_STEPS[-1]))
+
+
+def _cutout(g: Graph, image_name: str, bg_model: Ref, tag: str = "") -> tuple[Ref, Ref]:
+    """Load an image, cut the subject out and frame it in a 1024 square (black background).
+    Returns the framed image and the subject mask framed the same way."""
     img = g.add("LoadImage", "prepare", image=image_name)
     mask = g.add("RemoveBackground", "prepare", bg_removal_model=bg_model[0], image=img[0])
-    crop = g.add("ImageCropToMask", "prepare", images=img[0], masks=mask[0], width=1024,
-                 height=1024, pad_factor=1.1, grow_mask=0, background="#000000")
+    frame = dict(masks=mask[0], width=1024, height=1024, pad_factor=1.1, grow_mask=0,
+                 background="#000000")
+    crop = g.add("ImageCropToMask", "prepare", images=img[0], **frame)
     g.add("SaveImage", "prepare", out=f"input{tag}", images=crop[0], filename_prefix="atelier/input")
-    return crop
+    mask_img = g.add("MaskToImage", "prepare", mask=mask[0])
+    mask_crop = g.add("ImageCropToMask", "prepare", images=mask_img[0], **frame)
+    crop_mask = g.add("ImageToMask", "prepare", image=mask_crop[0], channel="red")
+    return crop, crop_mask
 
 
 def image_to_3d(image_name: str | None = None, *, views: dict[str, str] | None = None,
                 seed: int, quality: str = "standard", faces: int = 150_000,
-                texture: int = 2048, engine: str = "pixal3d") -> Graph:
-    """Image (or front/left/back/right views) to a UV-unwrapped mesh with PBR maps."""
+                texture: int = 2048, engine: str = "pixal3d", photo_paint: bool = True) -> Graph:
+    """Image (or front/left/back/right views) to a UV-unwrapped mesh with PBR maps.
+
+    ``photo_paint`` re-projects the sharp input image(s) onto the baked base colour. Only
+    Pixal3D is pixel-aligned with its input, so TRELLIS.2 always keeps the plain bake."""
     check_params(quality, faces, texture)
     if (image_name is None) == (views is None):
         raise ValueError("pass either image_name or views")
@@ -97,14 +117,18 @@ def image_to_3d(image_name: str | None = None, *, views: dict[str, str] | None =
 
     bg = g.add("LoadBackgroundRemovalModel", "prepare", bg_removal_name="birefnet.safetensors")
     dino = g.add("CLIPVisionLoader", "prepare", clip_name="dino_v3_L_naf_fp32.safetensors")
+    projections = []   # (image, mask, fov, azimuth, distance scale) for the photo paint
     if views is not None:
         crops = {v: _cutout(g, name, bg, f"_{v}") for v, name in views.items()}
         # 20 degrees is the rig the multi-view model was trained on (turnaround sheets, renders)
-        cond = g.add("Pixal3DMultiViewConditioning", "prepare", clip_vision_model=dino[0], fov=20.0,
-                     **{v: c[0] for v, c in crops.items()})
+        cond = g.add("Pixal3DMultiViewConditioning", "prepare", clip_vision_model=dino[0],
+                     fov=MULTIVIEW_FOV, **{v: c[0][0] for v, c in crops.items()})
         unet_name = MULTIVIEW_UNET
+        first = next(v for v in VIEWS if v in views)   # the conditioning poses the mesh to it
+        projections = [(c[0], c[1], MULTIVIEW_FOV, (_AZIMUTH[v] - _AZIMUTH[first]) % 360, MULTIVIEW_PAD)
+                       for v, c in sorted(crops.items(), key=lambda kv: VIEWS.index(kv[0]))]
     else:
-        crop = _cutout(g, image_name, bg)
+        crop, crop_mask = _cutout(g, image_name, bg)
         if engine == "pixal3d":
             moge = g.add("LoadMoGeModel", "prepare", model_name="moge_2_vitl_normal_fp16.safetensors")
             geo = g.add("MoGeInference", "prepare", moge_model=moge[0], image=crop[0],
@@ -114,6 +138,7 @@ def image_to_3d(image_name: str | None = None, *, views: dict[str, str] | None =
                         unit="degrees")
             cond = g.add("Pixal3DConditioning", "prepare", clip_vision_model=dino[0],
                          image=crop[0], camera_angle_x=fov[0])
+            projections = [(crop, crop_mask, fov[0], 0.0, 1.0)]
         else:
             cond = g.add("Trellis2Conditioning", "prepare", clip_vision_model=dino[0], image=crop[0])
         unet_name = ENGINES[engine]
@@ -156,7 +181,8 @@ def image_to_3d(image_name: str | None = None, *, views: dict[str, str] | None =
     colors = g.add("VaeDecodeTextureTrellis", "texture", samples=tex[0], vae=tex_vae[0],
                    shape_subdivides=hi[1])
 
-    remeshed = g.add("RemeshMesh", "bake", mesh=hi[0], resolution=q["remesh"], sign_mode="solid",
+    remeshed = g.add("RemeshMesh", "bake", mesh=hi[0], resolution=remesh_resolution(quality, faces),
+                     sign_mode="solid",
                      **{"sign_mode.fill": 20.0, "sign_mode.qef": False}, band=1.0, project_back=0.0,
                      fix_poles=False, smooth_iters=20, drop_small_components=0.01,
                      precluster_max_verts=20_000_000)
@@ -166,7 +192,9 @@ def image_to_3d(image_name: str | None = None, *, views: dict[str, str] | None =
     painted = g.add("PaintMesh", "bake", mesh=low[0], voxel_colors=colors[0])
     g.add("SaveGLB", "bake", out="preview_painted", mesh=painted[0], filename_prefix="atelier/painted")
 
-    uv = g.add("UnwrapMesh", "bake", mesh=low[0], segmenter="pec", resolution=texture, padding=1,
+    # wider gutters than the template's 1 px so chart edges don't bleed together in mipmaps
+    uv = g.add("UnwrapMesh", "bake", mesh=low[0], segmenter="pec", resolution=texture,
+               padding=max(2, texture // 1024),
                weld_distance=0.0002)
     maps = g.add("BakeTextureFromVoxel", "bake", mesh=uv[0], voxel_colors=colors[0],
                  texture_size=texture, reference_mesh=hi[0])
@@ -175,11 +203,16 @@ def image_to_3d(image_name: str | None = None, *, views: dict[str, str] | None =
     ao = g.add("BakeAmbientOcclusion", "bake", low_poly=uv[0], high_poly=remeshed[0],
                resolution=min(texture, 2048) // 2, samples=64, max_distance=0.71, strength=1.0,
                bias=0.01)
-    final = g.add("ApplyTextureToMesh", "bake", mesh=uv[0], base_color=maps[0], metallic=maps[1],
+    base = maps[0]
+    for image, mask, fov_deg, azimuth, scale in (projections if photo_paint else ()):
+        base = g.add("AtelierProjectImage", "bake", mesh=uv[0], base_color=base, image=image[0],
+                     mask=mask[0], fov=fov_deg, azimuth=azimuth, distance_scale=scale,
+                     strength=1.0, detail_sigma=12.0)[0]
+    final = g.add("ApplyTextureToMesh", "bake", mesh=uv[0], base_color=base, metallic=maps[1],
                   roughness=maps[2], occlusion=ao[0], normal_map=normal[0])
     final = g.add("MeshSmoothNormals", "bake", mesh=final[0], crease_angle=180.0)
     g.add("SaveGLB", "bake", out="model", mesh=final[0], filename_prefix="atelier/model")
-    for name, ref in (("map_base_color", maps[0]), ("map_metallic", maps[1]),
+    for name, ref in (("map_base_color", base), ("map_metallic", maps[1]),
                       ("map_roughness", maps[2]), ("map_normal", normal[0]), ("map_ao", ao[0])):
         g.add("SaveImage", "bake", out=name, images=ref, filename_prefix=f"atelier/{name}")
     return g

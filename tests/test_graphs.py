@@ -50,7 +50,9 @@ def check(g: graphs.Graph):
     dict(),
     dict(quality="draft", texture=1024, faces=30_000),
     dict(quality="high", texture=4096, faces=700_000),
+    dict(quality="high", texture=4096, faces=2_000_000),
     dict(engine="trellis2"),
+    dict(photo_paint=False),
 ])
 def test_image_graph_matches_engine_schema(kw):
     g = graphs.image_to_3d("atelier/x.png", seed=7, **kw)
@@ -89,8 +91,53 @@ def test_seeds_and_settings_reach_the_graph():
     assert max(steps) == graphs.QUALITY["draft"]["shape_steps"]
 
 
+def nodes_of(g, class_type):
+    return [n for n in g.nodes.values() if n["class_type"] == class_type]
+
+
+@pytest.mark.parametrize("quality,faces,res", [
+    ("standard", 150_000, 768), ("draft", 150_000, 512), ("draft", 700_000, 512),
+    ("draft", 1_000_000, 768), ("standard", 1_500_000, 768), ("high", 2_000_000, 1024),
+])
+def test_remesh_grid_follows_the_polycount(quality, faces, res):
+    assert graphs.remesh_resolution(quality, faces) == res
+    g = graphs.image_to_3d("x.png", seed=1, quality=quality, faces=faces)
+    assert nodes_of(g, "RemeshMesh")[0]["inputs"]["resolution"] == res
+    assert nodes_of(g, "DecimateMesh")[0]["inputs"]["target_face_count"] == faces
+
+
+def test_photo_paint_projects_the_input_with_the_moge_camera():
+    g = graphs.image_to_3d("x.png", seed=1)
+    proj, = nodes_of(g, "AtelierProjectImage")
+    fov_id = next(i for i, n in g.nodes.items() if n["class_type"] == "MoGeGeometryToFOV")
+    crop_id = next(i for i, n in g.nodes.items() if n["class_type"] == "Pixal3DConditioning")
+    assert proj["inputs"]["fov"] == [fov_id, 0]
+    assert proj["inputs"]["image"] == g.nodes[crop_id]["inputs"]["image"]
+    assert (proj["inputs"]["azimuth"], proj["inputs"]["distance_scale"]) == (0.0, 1.0)
+    proj_id = next(i for i, n in g.nodes.items() if n is proj)
+    for kind, slot in (("ApplyTextureToMesh", "base_color"), ("SaveImage", "images")):
+        users = [n for n in nodes_of(g, kind) if n["inputs"].get(slot) == [proj_id, 0]]
+        assert users, f"{kind} does not use the projected colour"
+    assert not nodes_of(graphs.image_to_3d("x.png", seed=1, engine="trellis2"), "AtelierProjectImage")
+    assert not nodes_of(graphs.image_to_3d("x.png", seed=1, photo_paint=False), "AtelierProjectImage")
+
+
+@pytest.mark.parametrize("views,azimuths", [
+    (graphs.VIEWS, [0, 90, 180, 270]), (("front", "back"), [0, 180]), (("back", "right"), [0, 90]),
+])
+def test_photo_paint_projects_every_view_from_its_rig_camera(views, azimuths):
+    g = graphs.image_to_3d(views={v: f"{v}.png" for v in views}, seed=1)
+    check(g)
+    proj = nodes_of(g, "AtelierProjectImage")
+    assert [n["inputs"]["azimuth"] for n in proj] == azimuths
+    assert {(n["inputs"]["fov"], n["inputs"]["distance_scale"]) for n in proj} == {(20.0, 1.1)}
+    # chained: each projection paints on top of the previous one
+    ids = [i for i, n in g.nodes.items() if n["class_type"] == "AtelierProjectImage"]
+    assert [n["inputs"]["base_color"][0] for n in proj[1:]] == ids[:-1]
+
+
 @pytest.mark.parametrize("bad", [
-    dict(quality="ultra"), dict(faces=10), dict(faces=5_000_000), dict(texture=3000), dict(engine="tripo"),
+    dict(quality="ultra"), dict(faces=10), dict(faces=2_000_001), dict(texture=3000), dict(engine="tripo"),
 ])
 def test_bad_settings_are_rejected(bad):
     with pytest.raises(ValueError):
