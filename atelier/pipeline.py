@@ -169,12 +169,21 @@ async def _model(job: dict, ctx: Context, backend) -> dict:
     model = adir / "model.glb"
     if not model.exists():
         raise PipelineError("the engine finished without producing a model")
+    try:
+        inspection = glb.inspect(model, target_faces=int(p["faces"]))
+    except (ValueError, KeyError, IndexError, OSError) as e:
+        raise PipelineError(f"the engine produced an unreadable GLB: {e}") from e
+    (adir / "inspection.json").write_text(json.dumps(inspection, indent=2))
+    if not inspection["ready"]:
+        raise PipelineError("the engine produced a model that cannot be delivered as a textured asset: "
+                            + " ".join(inspection["problems"]))
     thumb_src = adir / ("input.png" if job["kind"] == "image3d" else "input_front.png")
     if not thumb_src.exists():
         thumb_src = next(adir.glob("input*.png"), None)
     if thumb_src:
         shutil.copyfile(thumb_src, adir / "thumb.png")
-    meta = {"params": public_params(p), "stats": glb.stats(model), "seconds": round(time.time() - t0),
+    meta = {"params": public_params(p), "stats": glb.stats(model), "inspection": inspection,
+            "seconds": round(time.time() - t0),
             "maps": [Path(r).stem for r in MAP_FILES.values() if (adir / r).exists()],
             "source": p.get("source")}
     (adir / "asset.json").write_text(json.dumps(meta, indent=1))

@@ -28,6 +28,8 @@ def test_image_to_3d_builds_a_library_asset(client):
     assert a["params"]["seed"] == 11 and a["params"]["faces"] == 60000
     assert "image" not in a["params"] and "image" not in job["params"]  # no local paths leak
     assert a["stats"]["faces"] > 0 and set(a["maps"]) == {"base_color", "metallic", "roughness", "normal", "ao"}
+    assert a["inspection"]["ready"] and a["inspection"]["checks"]["base_color"]
+    assert client.get(f"/api/assets/{a['id']}/inspection").json()["ready"]
     assert set(a["previews"]) == {"structure", "painted"}
     r = client.get(a["url"])
     assert r.status_code == 200 and r.content[:4] == b"glTF"

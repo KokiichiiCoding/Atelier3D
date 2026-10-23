@@ -34,10 +34,14 @@ Read this whole file before changing anything, and keep it current when you fini
 
 ## 3. Repository state
 
-- Path `C:\Users\Kokii\Atelier3D`, local git repo. **Not on GitHub yet**: creating/pushing the
-  repo is the owner's call. If they ask: public repos commit as
-  `git -c user.name=KokiichiiCoding -c user.email=130875715+KokiichiiCoding@users.noreply.github.com commit`
-  (never the personal gmail); push from PowerShell (Git Credential Manager), not the Bash tool.
+- Path `C:\Users\Kokii\Atelier3D`, pushed to **https://github.com/KokiichiiCoding/Atelier3D**
+  (public, default branch `main`). That GitHub repo is the owner's old "Stunning-Modeler" repo,
+  renamed on 2026-10-23 to keep its star and forks; its old `claude/...` branches (the Polii
+  code, a Hunyuan/TripoSR checkpoint, a TrophyPanic slice) are unrelated history, left as-is.
+  Commit as `git -c user.name=KokiichiiCoding -c user.email=130875715+KokiichiiCoding@users.noreply.github.com commit`
+  (never the personal gmail); push from PowerShell (Git Credential Manager). No `gh` CLI on this
+  PC: GitHub API calls use the GCM credential (`git credential fill` with
+  `username=KokiichiiCoding`, from Bash; PowerShell's pipe breaks the protocol line).
 - Gitignored and never committed: `.venv/`, `engine/`, `models/`, `outputs/`, `data/`.
 - `models/` holds the Pixal3D core pack (verified complete by byte size, 9.95 GB).
 

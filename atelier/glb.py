@@ -46,6 +46,65 @@ def stats(path: Path) -> dict:
             "size": [round(h - l, 4) for l, h in zip(lo, hi)] if lo[0] != math.inf else None}
 
 
+def inspect(path: Path, target_faces: int | None = None) -> dict:
+    """Check the exported GLB's usable geometry and material links.
+
+    This is a structural check, not a visual-quality or watertightness claim. It only reads
+    the JSON chunk, so even a large 4K textured model is inexpensive to inspect.
+    """
+    g = read_json(path)
+    accessors = g.get("accessors", [])
+    materials = g.get("materials", [])
+    textures = g.get("textures", [])
+    images = g.get("images", [])
+    views = g.get("bufferViews", [])
+    primitives = [p for m in g.get("meshes", []) for p in m.get("primitives", [])]
+    problems, notes = [], []
+    if not primitives:
+        problems.append("The GLB contains no mesh.")
+    for number, prim in enumerate(primitives, 1):
+        label = f"Mesh part {number}"
+        attrs = prim.get("attributes", {})
+        pos_id = attrs.get("POSITION")
+        if not isinstance(pos_id, int) or not 0 <= pos_id < len(accessors) or accessors[pos_id].get("count", 0) < 3:
+            problems.append(f"{label} has no usable vertices.")
+        if prim.get("mode", 4) != 4:
+            problems.append(f"{label} is not a triangle mesh.")
+        if "TEXCOORD_0" not in attrs:
+            problems.append(f"{label} has no UV coordinates for its texture.")
+        if "NORMAL" not in attrs:
+            notes.append(f"{label} has no vertex normals; shading may be wrong.")
+        mat_id = prim.get("material")
+        mat = materials[mat_id] if isinstance(mat_id, int) and 0 <= mat_id < len(materials) else {}
+        base = mat.get("pbrMetallicRoughness", {}).get("baseColorTexture", {})
+        tex_id = base.get("index")
+        texture = textures[tex_id] if isinstance(tex_id, int) and 0 <= tex_id < len(textures) else {}
+        image_id = texture.get("source")
+        image = images[image_id] if isinstance(image_id, int) and 0 <= image_id < len(images) else {}
+        view_id = image.get("bufferView")
+        embedded = (isinstance(view_id, int) and 0 <= view_id < len(views)
+                    and views[view_id].get("byteLength", 0) > 0)
+        if not embedded:
+            problems.append(f"{label} has no embedded base-color texture.")
+    s = stats(path)
+    if not s["faces"]:
+        problems.append("The GLB contains no triangles.")
+    if s["size"] and any(v <= 0 for v in s["size"]):
+        notes.append("The model is flat on at least one axis; check it in the viewport.")
+    if target_faces and s["faces"] > target_faces * 1.1:
+        notes.append(f"The mesh has {s['faces']:,} triangles, above the {target_faces:,} target.")
+    if "normal" not in s["maps"]:
+        notes.append("No normal map is linked in the GLB; fine surface detail may be lost.")
+    if "metallic_roughness" not in s["maps"]:
+        notes.append("No metallic-roughness map is linked in the GLB; material variation may be limited.")
+    return {"ready": not problems, "parts": len(primitives), "problems": problems, "notes": notes,
+            "checks": {"triangles": bool(s["faces"]) and all(p.get("mode", 4) == 4 for p in primitives),
+                       "uv": bool(primitives) and all("TEXCOORD_0" in p.get("attributes", {}) for p in primitives),
+                       "base_color": bool(primitives) and not any("base-color texture" in p for p in problems),
+                       "normal_map": "normal" in s["maps"],
+                       "metallic_roughness": "metallic_roughness" in s["maps"]}}
+
+
 def _material_maps(m: dict):
     pbr = m.get("pbrMetallicRoughness", {})
     if "baseColorTexture" in pbr:

@@ -506,6 +506,10 @@ function renderRecent() {
 
 async function selectAsset(a, { fresh = false } = {}) {
   S.asset = a;
+  if (!a.inspection) {
+    try { a.inspection = await api(`/api/assets/${a.id}/inspection`); }
+    catch { /* older or damaged assets can still be opened */ }
+  }
   if (!fresh && S.follow && S.jobs.get(S.follow)?.status !== 'running') S.follow = null;
   renderAssetPanel();
   renderRecent();
@@ -565,6 +569,7 @@ function renderAssetPanel() {
   const dl = (fmt, label, title) => h('a.btn', { href: `/api/assets/${a.id}/download/${fmt}`, download: '', title }, label);
   const client = (fmt, label) => h('button.btn', { type: 'button', onclick: () => exportClient(a, fmt) }, label);
   const maps = Object.entries(a.maps || {});
+  const inspection = a.inspection;
   fill(panel,
     h('div.asset-title', {}, nameInput, star),
     h('span.muted.small', {}, `${fmtDate(a.created)} · ${({ image3d: 'from an image', multiview3d: 'from views' })[a.kind] || ''}${src.mode === 'text' ? ' (text)' : ''}`),
@@ -579,6 +584,10 @@ function renderAssetPanel() {
     maps.length ? h('div', {}, h('h2', {}, 'PBR maps'), h('div.maps', { style: 'margin-top:8px' },
       maps.map(([k, url]) => h('button', { type: 'button', title: k, onclick: () => openModal(h('h3', {}, mapLabel(k)), h('img.big', { src: url, alt: k })) },
         h('img', { src: url, alt: '', loading: 'lazy' }), h('span', {}, mapLabel(k)))))) : null,
+    inspection ? h('div.inspection', {},
+      h('div', {}, h('b', {}, inspection.ready ? 'Texture and mesh checks passed' : 'Asset needs review'),
+        h('span.muted.small', {}, `${inspection.parts} mesh part${inspection.parts === 1 ? '' : 's'} · ${inspection.notes.length} note${inspection.notes.length === 1 ? '' : 's'}`)),
+      h('button.btn.small', { type: 'button', onclick: () => showInspection(a) }, 'View report')) : null,
     h('dl.kv', {},
       h('dt', {}, 'Quality'), h('dd', {}, p.quality || '-'),
       h('dt', {}, 'Engine'), h('dd', {}, a.kind === 'multiview3d' ? 'Pixal3D multi-view' : p.engine === 'trellis2' ? 'TRELLIS.2' : 'Pixal3D'),
@@ -606,6 +615,24 @@ function renderAssetPanel() {
         b.textContent = 'Turntable video';
       } }, 'Turntable video'),
       h('button.btn.small.danger', { type: 'button', onclick: () => deleteAsset(a) }, 'Delete')));
+}
+
+function showInspection(a) {
+  const report = a.inspection;
+  if (!report) return;
+  const labels = { triangles: 'Triangle mesh', uv: 'UV coordinates', base_color: 'Embedded color texture',
+    normal_map: 'Normal map linked', metallic_roughness: 'Metal and roughness map linked' };
+  openModal(
+    h('h3', {}, `Asset checks: ${a.name}`),
+    h('p', {}, 'These checks verify the exported file’s structure. Inspect the model visually before using it.'),
+    h('ul.inspect-checks', {}, Object.entries(report.checks).map(([key, ok]) =>
+      h(`li.${ok ? 'pass' : 'warn'}`, {}, `${ok ? '✓' : '!' } ${labels[key] || key}`))),
+    ...report.problems.map((message) => h('p.inspect-problem', {}, message)),
+    ...report.notes.map((message) => h('p.inspect-note', {}, message)),
+    h('div.modal-actions', {},
+      h('button.btn', { type: 'button', onclick: () => save(new Blob([JSON.stringify(report, null, 2)],
+        { type: 'application/json' }), `${slug(a.name)}_inspection.json`) }, 'Download report'),
+      h('button.btn.primary', { type: 'button', onclick: closeModal }, 'Close')));
 }
 
 const mapLabel = (k) => ({ base_color: 'Color', metallic: 'Metal', roughness: 'Rough', normal: 'Normal', ao: 'AO' })[k] || k;

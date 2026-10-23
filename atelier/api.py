@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageOps, UnidentifiedImageError
 
-from . import __version__, exporters, graphs, models
+from . import __version__, exporters, glb, graphs, models
 from .config import CFG, ROOT
 from .demo import DemoBackend
 from .engine import EngineProcess, log_tail
@@ -350,6 +350,15 @@ def create_app() -> FastAPI:
     @app.get("/api/assets/{aid}")
     async def get_asset(aid: str):
         return public_asset(_asset_or_404(aid))
+
+    @app.get("/api/assets/{aid}/inspection")
+    async def inspect_asset(aid: str):
+        a = _asset_or_404(aid)
+        try:
+            return await asyncio.to_thread(glb.inspect, CFG.outputs_dir / aid / "model.glb",
+                                           a.get("params", {}).get("faces"))
+        except (ValueError, KeyError, IndexError, OSError) as e:
+            _bad(f"could not inspect this model: {e}", 422)
 
     @app.patch("/api/assets/{aid}")
     async def patch_asset(aid: str, body: dict = Body(...)):

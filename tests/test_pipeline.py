@@ -44,9 +44,33 @@ def test_glb_roundtrip_stats(tmp_path):
     s = glb.stats(p)
     assert s["faces"] > 1000 and s["vertices"] > 500 and s["maps"] == ["base_color"]
     assert s["size"][1] == pytest.approx(1.2, abs=1e-3)
+    report = glb.inspect(p, target_faces=10)
+    assert report["ready"] and report["checks"]["base_color"] and report["checks"]["uv"]
+    assert any("above" in note for note in report["notes"])
     with pytest.raises(ValueError):
         (tmp_path / "bad.glb").write_bytes(b"nope" * 10)
         glb.stats(tmp_path / "bad.glb")
+
+
+def test_inspection_rejects_an_untextured_mesh(tmp_path):
+    import json
+    import struct
+
+    original = tmp_path / "original.glb"
+    original.write_bytes(demo_glb(random.Random(4)))
+    raw = original.read_bytes()
+    json_len = struct.unpack_from("<I", raw, 12)[0]
+    doc = json.loads(raw[20:20 + json_len])
+    doc["materials"][0]["pbrMetallicRoughness"].pop("baseColorTexture")
+    encoded = json.dumps(doc).encode()
+    encoded += b" " * (-len(encoded) % 4)
+    binary = raw[20 + json_len:]
+    broken = tmp_path / "grey.glb"
+    broken.write_bytes(struct.pack("<III", 0x46546C67, 2, 20 + len(encoded) + len(binary))
+                       + struct.pack("<II", len(encoded), 0x4E4F534A) + encoded + binary)
+    report = glb.inspect(broken)
+    assert not report["ready"]
+    assert any("base-color texture" in problem for problem in report["problems"])
 
 
 def test_lathe_faces_point_outwards():
