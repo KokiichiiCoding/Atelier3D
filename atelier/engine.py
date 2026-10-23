@@ -211,8 +211,8 @@ class EngineProcess:
             t0 = time.monotonic()
             while time.monotonic() - t0 < timeout:
                 if self.proc.poll() is not None:
-                    await self._set("error", f"engine exited (code {self.proc.returncode}); "
-                                    f"see {CFG.data_dir / 'engine.log'}")
+                    log.close()
+                    await self._set("error", explain_exit(log_tail(), self.proc.returncode))
                     raise EngineError(self.error)
                 stats = await self.client.system_stats()
                 if stats:
@@ -240,6 +240,18 @@ class EngineProcess:
                 self.proc.kill()
         self.proc = None
         self.state = "stopped"
+
+
+GPU_BLOCKED = ("The engine cannot reach the NVIDIA GPU: Windows blocks it after a graphics driver "
+               "crash (nvidia-smi says \"GPU access blocked by the operating system\"). Restart the "
+               "PC, then start the engine again. If it keeps happening, update the NVIDIA driver.")
+
+
+def explain_exit(log: str, code: int | None) -> str:
+    """One readable line for an engine that died on start, from the end of its log."""
+    if "cudaGetDeviceCount" in log or "GPU access blocked" in log or "CUDA driver initialization failed" in log:
+        return GPU_BLOCKED
+    return f"engine exited (code {code}); see {CFG.data_dir / 'engine.log'}"
 
 
 def log_tail(lines: int = 60) -> str:

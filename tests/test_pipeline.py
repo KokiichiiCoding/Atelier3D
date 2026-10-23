@@ -92,6 +92,16 @@ def test_engine_rejections_are_readable():
     assert "500" in describe_rejection(httpx.Response(500, text="boom"))
 
 
+def test_engine_crash_on_a_blocked_gpu_is_explained():
+    from atelier.engine import GPU_BLOCKED, explain_exit
+
+    log = ("RuntimeError: Unexpected error from cudaGetDeviceCount(). Did you run some cuda "
+           "functions before calling NumCudaDevices() that might have already set an error? "
+           "Error 1: invalid argument\n")
+    assert explain_exit(log, 1) == GPU_BLOCKED and "Restart the PC" in GPU_BLOCKED
+    assert "code 1" in explain_exit("ImportError: no module named x\n", 1)
+
+
 def test_fbx_export_without_blender(tmp_path, monkeypatch):
     monkeypatch.setattr(exporters, "find_blender", lambda: None)
     p = tmp_path / "model.glb"
